@@ -8,8 +8,8 @@
 #include <linux/timer.h>
 #include <linux/sched.h>
 #include <asm/siginfo.h>
-
 #include <linux/version.h>
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/signal.h>
 #endif
@@ -30,19 +30,21 @@ static ssize_t device_write(struct file *, const char *, size_t, loff_t *);
 #define SIG_TEST 44  /* signal to raise */
 
 static struct file_operations fops = {
-    //    .read = device_read,
-   .write = device_write,
-   .open = device_open,
-   .release = device_release
+    .read = device_read,
+    .write = device_write,
+    .open = device_open,
+    .release = device_release
 };
 
-struct proc_dir_entry * proc_file;
-static char * file_name = "myModuleFile";
-static struct timer_list my_timer;
-static int Device_Open;
+struct proc_dir_entry * proc_file; /* file en /proc asociado */
+static char * file_name = "myModuleFile"; /* nombre del direcorio en /proc */
 
-pid_t pid = 0;  /* pid proceso que escribe*/
-struct task_struct * task; /* contexto  proceso que escribe*/
+static struct timer_list my_timer;/* Timer */
+static int Device_Open; /*  Indica si alguien esta usando el modulo */
+static int timer_in_use = 0 ; /* indicate if timer is in use */
+
+/* proceso que escribe identificado por el contexto*/
+static struct task_struct * task = NULL;
 
 /* Struct info para signal*/
 struct siginfo info = {
@@ -52,14 +54,16 @@ struct siginfo info = {
 };
 
 /* ===================================
-   ====       TIMER CALLBACK        ====
+   ====       TIMER CALLBACK      ====
    =================================== */
 void my_timer_callback( unsigned long data )
 {
+    timer_in_use = 0;
     printk( "my_timer_callback called (%ld).\n", jiffies );
-  
-   if(send_sig_info(SIG_TEST, &info, task) < 0)
-        printk("error sending signal pid= (%d).\n", pid);
+
+    /* try to send singnal to user application */
+    if(send_sig_info(SIG_TEST, &info, task) < 0)
+        printk("error sending signal");
     
 }
 
@@ -111,7 +115,7 @@ static ssize_t device_write(struct file *file, const char __user * usr_buffer,
     int ret;
     /* prevent buffer overflow */
     if(length > BUF_LEN){
-        printk(KERN_ERR "String is too large: ");
+        printk(KERN_ERR "String is too large\n");
         return ERROR;
     }
     
@@ -120,22 +124,25 @@ static ssize_t device_write(struct file *file, const char __user * usr_buffer,
         printk(KERN_ERR "Error copying from user");
         return ERROR;
     }
-	/* Identifiacion del proceso que escribe el archivo */    
-	 pid = task_pid_nr(current); /* get pid */
-    task = current; /* obtengo el contexto */
-    
-    printk( "user pid: (%d).\n", pid);
-    
+
     if (kstrtoint(kern_buffer,10,&time_ms) != SUCCESS){
         printk(KERN_ERR "Error converting to number");
         return ERROR;
     };
+	/* Identifiacion del proceso que escribe el archivo */    
 
+    task = current; /* obtengo el contexto */
+        
+   
     /* try to ativate timer */
     ret = mod_timer( &my_timer, jiffies + msecs_to_jiffies(time_ms));
-    if (ret) printk("Error in mod_timer\n");
+    if (ret){
+        printk("Error in mod_timer\n");
+        return ERROR;
+    }
+    timer_in_use++;
 
-    printk(KERN_INFO "timer expires in %d --- now: %ld\n  -- HZ:%d ",time_ms,jiffies,HZ);
+    printk(KERN_INFO "timer expires in %d --- now: %ld\n  -- HZ:%d \n",time_ms,jiffies,HZ);
     return length;
 
 }
@@ -146,7 +153,7 @@ static ssize_t device_write(struct file *file, const char __user * usr_buffer,
    =================================== */
 static int device_open(struct inode *inode, struct file *file)
 {
-    if (Device_Open)
+    if (Device_Open || timer_in_use)
         return -EBUSY;
 
     Device_Open++;
@@ -170,4 +177,17 @@ static int device_release(struct inode *inode, struct file *file)
     module_put(THIS_MODULE);
 
     return 0;
+}
+
+
+
+/* =====================================
+   ====         DEVICE READ         ====
+   ===================================== */
+static ssize_t device_read(struct file *filp,   /* see include/linux/fs.h   */
+               char __user* buffer,    /* buffer to fill with data */
+               size_t length,   /* length of the buffer     */
+               loff_t * offset)
+{
+    return ERROR;
 }
