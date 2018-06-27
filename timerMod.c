@@ -4,7 +4,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 /*
  *  Prototypes - this would normally go in a .h file
  */
@@ -104,10 +104,10 @@ static ssize_t device_write(struct file *file, const char __user * usr_buffer,
     };
 
     /* try to ativate timer */
-    ret = mod_timer( &my_timer, jiffies + msecs_to_jiffies(time_ms) );
+    ret = mod_timer( &my_timer, jiffies + msecs_to_jiffies(time_ms));
     if (ret) printk("Error in mod_timer\n");
 
-    printk(KERN_INFO "timer expires in %d",time_ms);
+    printk(KERN_INFO "timer expires in %d --- now: %ld\n  -- HZ:%d ",time_ms,jiffies,HZ);
     return length;
 
 }
