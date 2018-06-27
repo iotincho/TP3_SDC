@@ -99,7 +99,7 @@ static ssize_t device_write(struct file *file, const char __user * usr_buffer,
         return ERROR;
     }
     if (kstrtoint(kern_buffer,10,&time_ms) != SUCCESS){
-        printk(KERN_ERR "Error converting to number %s",kern_buffer);
+        printk(KERN_ERR "Error converting to number");
         return ERROR;
     };
 
