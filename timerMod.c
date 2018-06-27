@@ -5,6 +5,10 @@
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
+#include <linux/timer.h>
+#include <linux/sched.h>
+#include <asm/siginfo.h>
+
 /*
  *  Prototypes - this would normally go in a .h file
  */
@@ -31,12 +35,25 @@ static char * file_name = "myModuleFile";
 static struct timer_list my_timer;
 static int Device_Open;
 
+#define SIG_USR1 10
+pid_t pid = 0;
+
+struct siginfo info = {
+    .si_signo = SIG_USR1,
+	 .si_code = SI_QUEUE,
+	 .si_int = 0
+};
+
 /* ===================================
    ====       TIMER CALLBACK        ====
    =================================== */
 void my_timer_callback( unsigned long data )
 {
-  printk( "my_timer_callback called (%ld).\n", jiffies );
+    printk( "my_timer_callback called (%ld).\n", jiffies );
+  
+    //if(send_sig_info(SIG_USR1, &info, pid) < 0)
+    //    printk("error sending signal\n");
+    
 }
 
 
@@ -57,7 +74,6 @@ int init_module(void){
 
     return SUCCESS;
 }
-
 
 /* =====================================
    ====       CLEANUP MODULE        ====
@@ -98,6 +114,10 @@ static ssize_t device_write(struct file *file, const char __user * usr_buffer,
         printk(KERN_ERR "Error copying from user");
         return ERROR;
     }
+    
+	 pid = task_pid_nr(current);
+    printk( "user pid: (%d).\n", pid);
+    
     if (kstrtoint(kern_buffer,10,&time_ms) != SUCCESS){
         printk(KERN_ERR "Error converting to number %s",kern_buffer);
         return ERROR;
