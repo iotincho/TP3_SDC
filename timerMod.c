@@ -9,6 +9,12 @@
 #include <linux/sched.h>
 #include <asm/siginfo.h>
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h>
+#endif
+
+
 /*
  *  Prototypes - this would normally go in a .h file
  */
@@ -21,7 +27,7 @@ static ssize_t device_write(struct file *, const char *, size_t, loff_t *);
 
 #define SUCCESS 0
 #define ERROR -1
-
+#define SIG_TEST 44  /* signal to raise */
 
 static struct file_operations fops = {
     //    .read = device_read,
@@ -35,13 +41,14 @@ static char * file_name = "myModuleFile";
 static struct timer_list my_timer;
 static int Device_Open;
 
-#define SIG_USR1 10
-pid_t pid = 0;
+pid_t pid = 0;  /* pid proceso que escribe*/
+struct task_struct * task; /* contexto  proceso que escribe*/
 
+/* Struct info para signal*/
 struct siginfo info = {
-    .si_signo = SIG_USR1,
+    .si_signo = SIG_TEST,
 	 .si_code = SI_QUEUE,
-	 .si_int = 0
+	 .si_int = 1234
 };
 
 /* ===================================
@@ -51,11 +58,10 @@ void my_timer_callback( unsigned long data )
 {
     printk( "my_timer_callback called (%ld).\n", jiffies );
   
-    //if(send_sig_info(SIG_USR1, &info, pid) < 0)
-    //    printk("error sending signal\n");
+   if(send_sig_info(SIG_TEST, &info, task) < 0)
+        printk("error sending signal pid= (%d).\n", pid);
     
 }
-
 
 /* ===================================
    ====       INIT MODULE        ====
@@ -114,8 +120,10 @@ static ssize_t device_write(struct file *file, const char __user * usr_buffer,
         printk(KERN_ERR "Error copying from user");
         return ERROR;
     }
+	/* Identifiacion del proceso que escribe el archivo */    
+	 pid = task_pid_nr(current); /* get pid */
+    task = current; /* obtengo el contexto */
     
-	 pid = task_pid_nr(current);
     printk( "user pid: (%d).\n", pid);
     
     if (kstrtoint(kern_buffer,10,&time_ms) != SUCCESS){
